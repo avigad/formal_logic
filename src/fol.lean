@@ -168,8 +168,7 @@ theorem arity_in_fo_language (L : language) (i : fin L.num_symbols) :
   (L.arity i).in_fo_language L = tt :=
 begin
   apply (L.arity i).is_in_language_of_is_arity L,
-  apply L.arities_ok,
-
+  apply L.arities_ok
 end
 
 end language

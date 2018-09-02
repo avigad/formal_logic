@@ -133,7 +133,7 @@ instance : has_repr type := ⟨repr⟩
 def arities_ok_aux : type → list type → bool
 | (Var n)         l := l.empty
 | (Basic b)       l := l.empty
-| (Arr t₁ t₂)     l := arities_ok_aux t₁ l && arities_ok_aux t₂ l
+| (Arr t₁ t₂)     l := arities_ok_aux t₁ l && arities_ok_aux t₂ l && l.empty
 | (Constructor c) l := c.arity = l.length
 | (App t₁ t₂)     l := arities_ok_aux t₂ [] && arities_ok_aux t₁ (t₂ :: l)
 
