@@ -1,8 +1,10 @@
-import .hol
-
 /-
-Isolate the first-order fragment, over some basic sorts. Assume sorts are numbered
-0, 1, ..., n-1 for some n.
+Copyright (c) 2018 Jeremy Avigad. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE.
+Authors: Jeremy Avigad
+
+We isolate the first-order fragment of hol over some basic sorts. Assume sorts are numbered
+0, 1, ..., n-1 for some n. (We should change that later.)
 -/
 
 /-
@@ -11,6 +13,7 @@ This will be convenient: a hol "arity" is of the form
 where the `a`'s are sorts and the `r` is either a sort or `prop`. If `r` is a sort, the arity
 is a function arity, and if `r` is `prop`, it is a relation arity  
 -/
+import ..syntax
 
 namespace hol
 
@@ -39,6 +42,9 @@ def is_sort (num_sorts : nat) : type → bool
 def is_prop : type → bool 
 | (type.Basic type.basic.prop) := tt
 | _                            := ff
+
+lemma is_not_arrow_of_is_sort {ty : type} {n : nat} : ty.is_sort n = tt → ty.is_arrow = ff :=
+by cases ty; simp [type.is_sort]
 
 section
   open arity
@@ -104,6 +110,7 @@ theorem is_in_language_of_is_sort (L : fol.language) :
     Π t : type, t.is_sort L.num_sorts = tt → t.in_fo_language L = tt :=
 by { intro t, cases t; simp [is_sort, in_fo_language], intro h, simp [h] }
 
+set_option pp.all true
 theorem is_in_language_of_is_arity (L : fol.language) : 
     Π t : type, t.is_arity L.num_sorts = tt → t.in_fo_language L = tt
 | (type.Var n)         := by simp [is_arity, infer_arity_kind]
@@ -120,10 +127,13 @@ theorem is_in_language_of_is_arity (L : fol.language) :
       intro h₁, split,
       { apply is_in_language_of_is_sort _ _ h },
       apply is_in_language_of_is_arity, revert h₁,  
-      simp [is_arity, infer_arity_kind], exact id 
+      simp [is_arity]
     end
 | (type.Constructor _) := by simp [is_arity, infer_arity_kind]
 | (type.App _ _)       := by simp [is_arity, infer_arity_kind]
+
+/- TODO: if we replace every `= tt` with a coercion to Prop, something fails in the
+   previous lemma, and the terms are huge. -/
 
 end type
 
@@ -154,7 +164,61 @@ def in_fo_language (L : fol.language) : term → bool
     | _                         := ff
     end
 | (term.App t₁ t₂) := in_fo_language t₁ && in_fo_language t₂
-| (term.Abs s ty t) := in_fo_language t 
+| (term.Abs s ty t) := in_fo_language t
+
+def is_fo_term (L : fol.language) (t : term) (σ : list type) : Prop :=
+(t.typeof σ).is_sort L.num_sorts = tt
+
+def is_fo_formula (L : fol.language) (t : term) (σ : list type) : Prop :=
+(t.typeof σ).is_prop = tt
+
+lemma is_fo_term_iff (L : fol.language) (t : term) (σ : list type)
+    (h : is_well_typed t σ) :
+  t.is_fo_term L σ ↔ 
+    ((t.get_app_fn.typeof σ).get_return_type.is_sort L.num_sorts = tt ∧ 
+     (t.get_app_fn.typeof σ).get_arg_types = (t.get_app_args).map (λ t', t'.typeof σ)) :=
+begin
+  rw [is_fo_term],
+  split,
+  { intro h₀,
+    have h₁ := type.is_not_arrow_of_is_sort h₀,
+    rw typeof_eq_of_not_is_arrow h₁ h at h₀, 
+    rw [h₀, get_arg_types_typeof_get_app_fn h₁ h], 
+    split; trivial },
+    intro h, cases h with h₀ h₁,
+    rw ← mk_app_get_app t,
+    rw typeof_mk_app,
+    have : (get_app_args t).length = (t.get_app_fn.typeof σ).get_arg_types.length,
+      by { rw h₁, simp },
+    rw this, rw (list.drop_eq_nil _ _).mpr, { simp [h₀] },
+    apply le_refl
+end
+
+-- TODO: refactor. Interestingly, this does not require t.in_fo_language L.
+-- But the well_typed should be inide the iff.
+-- See `is_well_typed_mk_app` in hol syntax.
+theorem is_fo_term_iff' (L : fol.language) (σ : list type) 
+    (h : ∀ n (h : n < σ.length), (σ.nth_le n h).is_sort L.num_sorts) : 
+  ∀ t : term, t.is_well_typed σ → 
+    (is_fo_term L t σ ↔
+      (t.is_var = tt ∧ t.var_num < σ.length) ∨ 
+      (t.is_const = tt ∧ (t.typeof σ).is_sort (L.num_sorts) = tt) ∨ 
+      (t.is_app = tt ∧ 
+        let fn := t.get_app_fn,
+            args := t.get_app_args,
+            fn_type := fn.typeof σ in
+          fn_type.get_return_type.is_sort L.num_sorts = tt ∧
+          fn_type.get_arg_types = t.get_app_args.map (λ t', t'.typeof σ))) :=
+begin
+  intro t, 
+  induction t with _ _ t₁ t₂ ih₁ ih₂; intro h',
+  { cases h',
+    simp [in_fo_language, is_var, is_const, is_app, is_fo_term, type.is_sort],
+    simp [typeof, h'_h, var_num], have h' := h _ h'_h, exact h'},
+  { simp [is_var, is_const, is_app, is_fo_term, type.is_sort] },
+  { simp [is_var, is_const, is_app, is_fo_term], apply is_fo_term_iff _ _ _ h' },
+  { simp [in_fo_language, is_var, is_const, is_app, is_fo_term, type.is_sort, typeof] }
+end
 
 end term
 

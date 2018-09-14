@@ -1,9 +1,9 @@
-import .fol
+import .syntax
 
 namespace fol
 open hol
 
-def arity_val (L : fol.language) (val : fin L.num_sorts → Type*) : 
+def eval_arity (L : fol.language) (val : fin L.num_sorts → Type*) : 
   Π t : type, t.in_fo_language L = tt → Type*
 | (type.Var n)         h := by { simp [type.in_fo_language] at h, contradiction } 
 | (type.Basic b)       h := 
@@ -16,13 +16,13 @@ def arity_val (L : fol.language) (val : fin L.num_sorts → Type*) :
 | (type.Arr t₁ t₂)     h :=
     begin
       simp [type.in_fo_language] at h,
-      exact ((arity_val t₁ h.left) → (arity_val t₂ h.right)) 
+      exact ((eval_arity t₁ h.left) → (eval_arity t₂ h.right)) 
     end
 | (type.Constructor c) h := by { simp [type.in_fo_language] at h, contradiction } 
 | (type.App t₁ t₂)     h := by { simp [type.in_fo_language] at h, contradiction } 
 
 structure model (L : language) :=
 (sort_val : fin L.num_sorts → Type*)
-(symbol_val : Π i : fin L.num_symbols, arity_val L sort_val (L.arity i) (L.arity_in_fo_language i))
+(symbol_val : Π i : fin L.num_symbols, eval_arity L sort_val (L.arity i) (L.arity_in_fo_language i))
 
 end fol
