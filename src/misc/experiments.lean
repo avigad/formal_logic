@@ -1,4 +1,4 @@
-import .vm_check .hol
+import .vm_check ..syntax
 
 /-
 foo is an rbmap with ("A", 0) to ("Z", 25) 

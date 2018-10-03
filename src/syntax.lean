@@ -451,6 +451,25 @@ def typeof_p : term → list type → option type
                     end
 
 @[simp]
+def is_well_typed_b : term → list type → bool
+| (Var n)     σ := if n < σ.length then tt else ff
+| (Const c)   σ := tt
+| (App t₁ t₂) σ := is_well_typed_b t₁ σ && is_well_typed_b t₂ σ && 
+                     (typeof t₁ σ).is_arrow && ((typeof t₁ σ).domain = typeof t₂ σ)
+| (Abs s ty t) σ := is_well_typed_b t (ty :: σ)
+
+theorem is_well_typed_iff (t : term) : 
+  ∀ σ, is_well_typed t σ ↔ (is_well_typed_b t σ = tt) :=
+begin
+  induction t with _ _ _ _ h₁ h₂ _ ty _ h,
+  {intro σ, split, {intro h, cases h; simp [*]}, intro h, simp at h, constructor, assumption},
+  {intro σ, split, {intro h, cases h; simp [*]}, intro h, simp at h, constructor},
+  {intro σ, simp [(h₁ σ).symm, (h₂ σ).symm], split, {intro h, cases h; simp [*]}, intro h, constructor; simp [*]},
+  {intro σ, simp [(h (ty::σ)).symm], split, {intro h, cases h, assumption}, 
+    intro h, constructor; simp [*]}
+end
+
+@[simp]
 def is_var : term → bool
 | (Var n) := tt
 | _       := ff
@@ -505,25 +524,6 @@ by induction t; simp [get_app_fn, get_app_args_aux, mk_app, *]
 
 theorem mk_app_get_app (t : term) : mk_app (get_app_fn t) (get_app_args t) = t :=
 by simp [get_app_args, mk_app_get_app_aux, mk_app]
-
-@[simp]
-def is_well_typed_b : term → list type → bool
-| (Var n)     σ := if n < σ.length then tt else ff
-| (Const c)   σ := tt
-| (App t₁ t₂) σ := is_well_typed_b t₁ σ && is_well_typed_b t₂ σ && 
-                     (typeof t₁ σ).is_arrow && ((typeof t₁ σ).domain = typeof t₂ σ)
-| (Abs s ty t) σ := is_well_typed_b t (ty :: σ)
-
-theorem is_well_typed_iff (t : term) : 
-  ∀ σ, is_well_typed t σ ↔ (is_well_typed_b t σ = tt) :=
-begin
-  induction t with _ _ _ _ h₁ h₂ _ ty _ h,
-  {intro σ, split, {intro h, cases h; simp [*]}, intro h, simp at h, constructor, assumption},
-  {intro σ, split, {intro h, cases h; simp [*]}, intro h, simp at h, constructor},
-  {intro σ, simp [(h₁ σ).symm, (h₂ σ).symm], split, {intro h, cases h; simp [*]}, intro h, constructor; simp [*]},
-  {intro σ, simp [(h (ty::σ)).symm], split, {intro h, cases h, assumption}, 
-    intro h, constructor; simp [*]}
-end
 
 theorem is_well_typed_mk_app (l : list term) (σ : list type) :
   ∀ t, is_well_typed (mk_app t l) σ ↔ 

@@ -83,16 +83,16 @@ def eval (bval : ℕ → option Type*) : Π t : type, t.ok bval → Type*
 | (App _ _ )      h := by { simp [type.ok] at h, contradiction }
 
 /- some useful functions -/
-theorem ok_domain (bval : ℕ → option Type*): Π t : type, t.ok bval → t.domain.ok bval :=
+theorem ok_domain (bval : ℕ → option Type*): Π t : type, t.ok bval = tt → t.domain.ok bval = tt :=
 begin
   intro t, induction t; try {exact id}, 
-  simp [type.domain, type.ok], intro h, exact h.left
+  simp [type.domain, type.ok], intro h, simp [h]
 end
 
 theorem ok_codomain (bval : ℕ → option Type*): Π t : type, t.ok bval → t.codomain.ok bval :=
 begin
   intro t, induction t; try {exact id}, 
-  simp [type.codomain, type.ok], intro h, exact h.right
+  simp [type.codomain, type.ok]
 end
 
 def eval_ext (bval : ℕ → option Type*) (t₁ t₂: type) (h : t₁ = t₂) : 
