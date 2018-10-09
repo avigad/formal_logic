@@ -12,12 +12,11 @@ and "user" objects. The former are fixed for the implementation, and the impleme
 to them directly (for example, logical connectives, arithmetic symbols, types like nat and bool,
 and type constructors like list, sum, and prod).
 
-TODO: objects store all the relevant information for type checking, but also information as to 
-the source. We can add additional predicates to say that a type or term is correct with respect
-to the environment, i.e. that the objects have the properties the terms say they have.
+TODO: Factor out types for constants, basic types, etc. These can include more information
+about the environment, source, pretty-printing, etc.
 
-TODO: In addition to "built in" and "user" objects, we can add "local" objects. In the meanwhile,
-we use indices everywhere.
+TODO: We do not have "local_constants". It is probably best to have these as special sorts of
+constants, but we can revisit this decision.
 
 TODO: For now, we won't handle polymorphic types, though we will eventually (mostly following
 HOL light).
@@ -25,8 +24,8 @@ HOL light).
 TODO: For now, use naive equality tests. We can worry about more efficient tests (e.g. with
 unique id's) later, if necessary.
 
-TODO: if we replace each `= tt` by a coercion to bool, things break in some places. They are fixable,
-but then something more dramatic breaks in fol.syntax and the terms are huge.
+TODO: if we replace each `= tt` by a coercion to bool, things break in some places. They are 
+fixable, but then something more dramatic breaks in fol.syntax and the terms are huge.
 -/
 import data.list
 
@@ -63,15 +62,12 @@ end
 theorem length_le_of_prefix {α : Type*} {l₁ l₂ : list α} (h : l₁ <+: l₂) : length l₁ ≤ length l₂ :=
 length_le_of_sublist $ sublist_of_prefix h
 
+theorem prefix_iff_eq_of_length_eq {α : Type*} {l₁ l₂ : list α} (h : length l₁ = length l₂) :
+  l₁ <+: l₂ ↔ (l₁ = l₂) :=
+by { split, { intro h', exact eq_of_prefix_of_length_eq h' h}, intro h', rw h'}
+
 theorem drop_succ {α : Type*} (n : nat) (l : list α) : drop n.succ l = drop n (drop 1 l) :=
 by induction l; simp
-
-theorem drop_add {α : Type*} (n m : nat) (l : list α) : drop (n + m) l = drop n (drop m l) :=
-begin
-  revert l,
-  induction m with m ih, simp,
-  simp [nat.add_succ], intro l, rw drop_succ m, rw drop_succ (n + m), rw ih  
-end
 
 theorem drop_eq_nil  {α : Type*} (n : nat) (l : list α) : drop n l = [] ↔ n ≥ l.length:=
 begin
@@ -88,9 +84,8 @@ end list
 namespace hol
 
 /-
-Instead of option, we'll have failure produce error messages. But we will not use
-the full-blown exception monad or do anything fancy, to make it easier to reason
-about these programs.
+Instead of option, we'll have failure produce error messages. But we will not use the full-blown
+exception monad or do anything fancy, to make it easier to reason about these programs.
 
 TODO: not using this yet.
 -/
@@ -271,6 +266,8 @@ end type
 section
 open type
 
+-- TODO: mark these as reducible?
+
 def mk_prop := Basic basic.prop
 def mk_nat := Basic basic.nat
 def mk_int := Basic basic.int
@@ -360,7 +357,8 @@ namespace term
     def nval (n : nat) : const := ⟨kind.nval n, mk_nat, []⟩
 
     def repr : const → string
-    | ⟨kind.user n, t, l⟩       := "(const.user " ++ n.repr ++ " " ++ t.repr ++ " " ++ l.repr ++ ")"
+    | ⟨kind.user n, t, l⟩       := "(const.user " ++ n.repr ++ " " ++ t.repr ++ " " ++ 
+                                      l.repr ++ ")"
     | ⟨kind.true, _, _⟩         := "const.true"
     | ⟨kind.false, _, _⟩        := "const.false"
     | ⟨kind.not, _, _⟩          := "const.not"
@@ -379,6 +377,7 @@ namespace term
 
     instance : has_repr const := ⟨repr⟩
 
+    -- TODO: delete this?
     def is_connective : const → bool
     | ⟨kind.true, t, l⟩         := if t = mk_prop then l.empty else bool.ff
     | ⟨kind.false, t, l⟩        := if t = mk_prop then l.empty else bool.ff
@@ -403,6 +402,7 @@ inductive term
 
 namespace term
 
+-- TODO: not needed?
 def sizeof' : term → nat
 | (Var n)      := 0
 | (Const n)    := 0
@@ -417,7 +417,8 @@ def repr : term → string
 | (App t₁ t₂)  := "(App " ++ t₁.repr ++ t₂.repr ++ ")"
 | (Abs s ty t) := "(Abs " ++ _root_.repr s ++ " " ++ ty.repr ++ " " ++ t.repr ++ ")"
 
-/-- Inter the type of a term, given an assignment to free variables. Assumes the expression is well-typed-/
+/-- Infers the type of a term, given an assignment to free variables. Assumes the expression is
+    well-typed-/
 def typeof : term → list type → type
 | (Var n) σ       := if h : n < σ.length then σ.nth_le n h else mk_nat
 | (Const c) σ     := c.type
@@ -436,7 +437,8 @@ inductive is_well_typed : term → list type → Prop
       (σ : list type)
     (h₁ : is_well_typed t (ty :: σ))                     : is_well_typed (Abs s ty t) σ
 
-/-- Inter the type of a term, given an assignment to free variables. Returns none of expression is not well-typed. -/
+/-- Infers the type of a term, given an assignment to free variables. Returns none of expression is
+    not well-typed. -/
 def typeof_p : term → list type → option type 
 | (Var n)     σ  := σ.nth n
 | (Const c)   σ  := some c.type 
@@ -450,6 +452,7 @@ def typeof_p : term → list type → option type
                     | _        := none
                     end
 
+-- a boolean version
 @[simp]
 def is_well_typed_b : term → list type → bool
 | (Var n)     σ := if n < σ.length then tt else ff
@@ -545,6 +548,12 @@ begin
   assumption  
 end
 
+theorem is_well_typed_iff' {t : term} {σ : list type} :
+  t.is_well_typed σ ↔ 
+    is_well_typed (t.get_app_fn) σ ∧ (∀ t' ∈ t.get_app_args, is_well_typed t' σ) ∧ 
+           t.get_app_args.map (λ t', typeof t' σ) <+: (t.get_app_fn.typeof σ).get_arg_types :=
+by { rw [← mk_app_get_app t, is_well_typed_mk_app], simp [mk_app_get_app] }
+
 theorem typeof_mk_app (t: term) (as : list term) (σ : list type) :
   typeof (mk_app t as) σ = 
     type.mk_fn_type (((t.typeof σ).get_arg_types).drop (as.length)) 
@@ -585,8 +594,8 @@ begin
   by {apply le_antisymm this, rw typeof_mk_app_is_arrow at h, simp at h, exact h }
 end
 
-theorem get_arg_types_typeof_get_app_fn {t : term} {σ : list type} 
-    (h : (t.typeof σ).is_arrow = ff) (h' : t.is_well_typed σ) :
+theorem get_arg_types_typeof_get_app_fn {t : term} {σ : list type} (h : (t.typeof σ).is_arrow = ff)
+     (h' : t.is_well_typed σ) :
   (t.get_app_fn.typeof σ).get_arg_types = t.get_app_args.map (λ t', t'.typeof σ) :=
 begin
   have : t.get_app_args.length = (t.get_app_fn.typeof σ).num_arg_types,
@@ -599,6 +608,27 @@ begin
   exact this.symm
 end
 
+theorem is_well_typed_of_not_is_arrow {t : term} {σ : list type} (h : (t.typeof σ).is_arrow = ff) :
+  t.is_well_typed σ ↔ 
+    is_well_typed (t.get_app_fn) σ ∧ 
+    (∀ t' ∈ t.get_app_args, is_well_typed t' σ) ∧ 
+    t.get_app_args.map (λ t', typeof t' σ) = (t.get_app_fn.typeof σ).get_arg_types :=
+begin
+  split; intro h',
+  { have h₀ := is_well_typed_iff'.mp h',
+    rcases h₀ with ⟨h₀, h₁, h₂⟩,
+    split, apply h₀,
+    split, apply h₁, 
+    apply list.eq_of_prefix_of_length_eq h₂, simp,
+    rw length_get_app_args_of_not_is_arrow h h',
+    rw [type.length_get_arg_types] },
+  rw is_well_typed_iff',    
+  rcases h' with ⟨h₀, h₁, h₂⟩,
+  split, apply h₀,
+  split, apply h₁, 
+  rw h₂ 
+end
+
 theorem typeof_eq_of_not_is_arrow {t : term} {σ : list type} 
     (h : (t.typeof σ).is_arrow = ff) (h' : t.is_well_typed σ) :
   t.typeof σ = ((t.get_app_fn).typeof σ).get_return_type :=
@@ -608,6 +638,37 @@ begin
   transitivity, exact h₀,
   rw [typeof_mk_app, length_get_app_args_of_not_is_arrow h h', ← type.length_get_arg_types],
   rw (list.drop_eq_nil _ _).mpr, simp, apply le_refl
+end
+
+lemma type_is_not_arrow' {t : term} {σ : list type} (h : is_well_typed t σ) :
+  (t.typeof σ).is_arrow = ff ↔ 
+     (t.get_app_fn.typeof σ).get_arg_types = (t.get_app_args).map (λ t', t'.typeof σ) :=
+begin
+  split,
+  { intro h₀,
+    rw [get_arg_types_typeof_get_app_fn h₀ h] },
+  intro h,
+  rw ← mk_app_get_app t,
+  rw typeof_mk_app,
+  have : (get_app_args t).length = (t.get_app_fn.typeof σ).get_arg_types.length,
+    by { rw h, simp },
+  rw this, rw (list.drop_eq_nil _ _).mpr (le_refl _),
+  apply type.is_arrow_get_return_type_eq_ff
+end
+
+-- an inductive characterization of well typed terms whose types are not arrows 
+theorem type_is_not_arrow_iff (σ : list type) : 
+  ∀ t : term, t.is_well_typed σ → 
+    ((t.typeof σ).is_arrow = ff ↔
+      (t.is_var = tt ∧ (t.typeof σ).is_arrow = ff) ∨ 
+      (t.is_const = tt ∧ (t.typeof σ).is_arrow = ff) ∨ 
+      (t.is_app = tt ∧ 
+          (t.get_app_fn.typeof σ).get_arg_types = t.get_app_args.map (λ t', t'.typeof σ))) :=
+begin
+  intro t, 
+  induction t with _ _ t₁ t₂ ih₁ ih₂; simp,
+  { intro h', simp [type_is_not_arrow' h'] },
+  simp [typeof]
 end
 
 end term

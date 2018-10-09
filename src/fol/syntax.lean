@@ -99,24 +99,27 @@ namespace hol
 
 namespace type
 
+@[reducible]
+def is_fo_sort (L : fol.language) (t : type) : bool :=
+t.is_sort L.num_sorts
+
 def in_fo_language (L : fol.language) : type → bool
 | (type.Var n)         := ff
-| t@(type.Basic b)     := t.is_sort L.num_sorts || t.is_prop
+| t@(type.Basic b)     := t.is_fo_sort L || t.is_prop
 | (type.Arr t₁ t₂)     := in_fo_language t₁ && in_fo_language t₂
 | (type.Constructor _) := ff
 | (type.App _ _)       := ff
 
 theorem is_in_language_of_is_sort (L : fol.language) :
-    Π t : type, t.is_sort L.num_sorts = tt → t.in_fo_language L = tt :=
-by { intro t, cases t; simp [is_sort, in_fo_language], intro h, simp [h] }
+    Π t : type, t.is_fo_sort L = tt → t.in_fo_language L = tt :=
+by { intro t, cases t; simp [is_fo_sort, is_sort, in_fo_language], intro h, simp [h] }
 
-set_option pp.all true
 theorem is_in_language_of_is_arity (L : fol.language) : 
     Π t : type, t.is_arity L.num_sorts = tt → t.in_fo_language L = tt
 | (type.Var n)         := by simp [is_arity, infer_arity_kind]
 | (type.Basic b)       := 
     begin 
-      simp [is_arity, infer_arity_kind, in_fo_language],
+      simp [is_arity, infer_arity_kind, in_fo_language, is_fo_sort],
       cases is_sort L.num_sorts (Basic b); simp,
       cases is_prop (Basic b); simp
     end
@@ -139,86 +142,90 @@ end type
 
 namespace term
 
-def in_fo_language (L : fol.language) : term → bool 
-| (term.Var n)              := tt
-| (term.Const ⟨symb, t, l⟩) := 
-    match symb with
-    | (term.const.kind.user n)  := if h : n < L.num_symbols then
-                                     if L.arity ⟨n, h⟩ = t then l.empty else ff
-                                   else ff
-    | (term.const.kind.true)    := if t = mk_prop then l.empty else bool.ff
-    | (term.const.kind.false)   := if t = mk_prop then l.empty else bool.ff
-    | (term.const.kind.not)     := if t = (mk_prop ⇒ mk_prop) then l.empty else bool.ff
-    | (term.const.kind.and)     := if t = (mk_prop ⇒ mk_prop ⇒ mk_prop) then l.empty else bool.ff
-    | (term.const.kind.or)      := if t = (mk_prop ⇒ mk_prop ⇒ mk_prop) then l.empty else bool.ff
-    | (term.const.kind.implies) := if t = (mk_prop ⇒ mk_prop ⇒ mk_prop) then l.empty else bool.ff
-    | (term.const.kind.iff)     := if t = (mk_prop ⇒ mk_prop ⇒ mk_prop) then l.empty else bool.ff
-    | (term.const.kind.all)     := match l with 
-                                   | [t'] := if t = (t' ⇒ t' ⇒ t') then bool.tt else bool.ff
-                                   | _     := ff
-                                   end
-    | (term.const.kind.ex)      := match l with 
-                                   | [t'] := if t = (t' ⇒ t' ⇒ t') then bool.tt else bool.ff
-                                   | _     := ff
-                                   end
-    | _                         := ff
-    end
-| (term.App t₁ t₂) := in_fo_language t₁ && in_fo_language t₂
-| (term.Abs s ty t) := in_fo_language t
+namespace const
+
+def in_fo_language (L : fol.language) : const → bool
+| ⟨symb, t, l⟩ := 
+  match symb with
+  | (term.const.kind.user n)  := if h : n < L.num_symbols then
+                                   if L.arity ⟨n, h⟩ = t ∧ t.in_fo_language L = bool.tt 
+                                   then l.empty else bool.ff
+                                 else bool.ff
+  | (term.const.kind.true)    := if t = mk_prop then l.empty else bool.ff
+  | (term.const.kind.false)   := if t = mk_prop then l.empty else bool.ff
+  | (term.const.kind.not)     := if t = (mk_prop ⇒ mk_prop) then l.empty else bool.ff
+  | (term.const.kind.and)     := if t = (mk_prop ⇒ mk_prop ⇒ mk_prop) then l.empty else bool.ff
+  | (term.const.kind.or)      := if t = (mk_prop ⇒ mk_prop ⇒ mk_prop) then l.empty else bool.ff
+  | (term.const.kind.implies) := if t = (mk_prop ⇒ mk_prop ⇒ mk_prop) then l.empty else bool.ff
+  | (term.const.kind.iff)     := if t = (mk_prop ⇒ mk_prop ⇒ mk_prop) then l.empty else bool.ff
+  | (term.const.kind.all)     := match l with 
+                                 | [t'] := if t = (t' ⇒ t' ⇒ t') then bool.tt else bool.ff
+                                 | _     := bool.ff
+                                 end
+  | (term.const.kind.ex)      := match l with 
+                                 | [t'] := if t = (t' ⇒ t' ⇒ t') then bool.tt else bool.ff
+                                 | _     := bool.ff
+                                 end
+  | _                         := bool.ff
+  end
+
+end const 
+
+@[simp]
+def in_fo_language (L : fol.language) (σ : list type): term → bool 
+| (term.Var n)      := if h : n < σ.length then (σ.nth_le n h).is_fo_sort L else bool.ff  
+| (term.Const c)    := c.in_fo_language L = tt
+| (term.App t₁ t₂)  := in_fo_language t₁ && in_fo_language t₂ = tt
+| (term.Abs s ty t) := in_fo_language t = ff
 
 def is_fo_term (L : fol.language) (t : term) (σ : list type) : Prop :=
-(t.typeof σ).is_sort L.num_sorts = tt
+t.is_well_typed σ ∧ in_fo_language L σ t = tt ∧ (t.typeof σ).is_fo_sort L = tt
 
-def is_fo_formula (L : fol.language) (t : term) (σ : list type) : Prop :=
-(t.typeof σ).is_prop = tt
-
-lemma is_fo_term_iff (L : fol.language) (t : term) (σ : list type)
-    (h : is_well_typed t σ) :
-  t.is_fo_term L σ ↔ 
-    ((t.get_app_fn.typeof σ).get_return_type.is_sort L.num_sorts = tt ∧ 
-     (t.get_app_fn.typeof σ).get_arg_types = (t.get_app_args).map (λ t', t'.typeof σ)) :=
+theorem in_fo_language_mk_app (L : fol.language) (t : term) (l : list term) (σ : list type) :
+  (mk_app t l).in_fo_language L σ = tt ↔ 
+    (t.in_fo_language L σ = tt ∧ (∀ t' ∈ l, in_fo_language L σ t' = tt)) :=
 begin
-  rw [is_fo_term],
-  split,
-  { intro h₀,
-    have h₁ := type.is_not_arrow_of_is_sort h₀,
-    rw typeof_eq_of_not_is_arrow h₁ h at h₀, 
-    rw [h₀, get_arg_types_typeof_get_app_fn h₁ h], 
-    split; trivial },
-    intro h, cases h with h₀ h₁,
-    rw ← mk_app_get_app t,
-    rw typeof_mk_app,
-    have : (get_app_args t).length = (t.get_app_fn.typeof σ).get_arg_types.length,
-      by { rw h₁, simp },
-    rw this, rw (list.drop_eq_nil _ _).mpr, { simp [h₀] },
-    apply le_refl
+  revert t, induction l with t' l ih; simp,
+  intro t, rw ih, simp, rw [← and.assoc, @and.comm (_ = tt)],
 end
 
--- TODO: refactor. Interestingly, this does not require t.in_fo_language L.
--- But the well_typed should be inide the iff.
--- See `is_well_typed_mk_app` in hol syntax.
-theorem is_fo_term_iff' (L : fol.language) (σ : list type) 
-    (h : ∀ n (h : n < σ.length), (σ.nth_le n h).is_sort L.num_sorts) : 
-  ∀ t : term, t.is_well_typed σ → 
-    (is_fo_term L t σ ↔
-      (t.is_var = tt ∧ t.var_num < σ.length) ∨ 
-      (t.is_const = tt ∧ (t.typeof σ).is_sort (L.num_sorts) = tt) ∨ 
-      (t.is_app = tt ∧ 
-        let fn := t.get_app_fn,
-            args := t.get_app_args,
-            fn_type := fn.typeof σ in
-          fn_type.get_return_type.is_sort L.num_sorts = tt ∧
-          fn_type.get_arg_types = t.get_app_args.map (λ t', t'.typeof σ))) :=
+private theorem hoist_precondition {A B C : Prop} (h₀ : A → C) (h₁ : B → C) (h : C → (A ↔ B)) :
+  A ↔ B :=
+iff.intro (λ hA, (h (h₀ hA)).mp hA) (λ hB, (h (h₁ hB)).mpr hB)
+
+/-
+both sides imply: is not an arrow, is well_typed, ...
+-/
+
+theorem is_fo_term_iff_aux (L : fol.language) (t : term) (σ : list type) (h : t.is_app = tt):
+  is_fo_term L t σ ↔ 
+    let fn := t.get_app_fn,
+          args := t.get_app_args,
+          fn_type := fn.typeof σ in
+        fn.is_const = tt ∧ fn.in_fo_language L σ = tt ∧ fn_type.get_return_type.is_fo_sort L = tt ∧ 
+        (∀ t' ∈ args, is_fo_term L t σ) ∧
+        fn_type.get_arg_types = t.get_app_args.map (λ t', t'.typeof σ) :=
+sorry  
+
+theorem is_fo_term_iff (L : fol.language) (t : term) (σ : list type) :
+  is_fo_term L t σ ↔ 
+    (t.is_var = tt ∧ t.in_fo_language L σ = tt) ∨ 
+    (t.is_const = tt ∧ t.in_fo_language L σ = tt ∧ (t.typeof σ).is_fo_sort L ) ∨ 
+    (t.is_app = tt ∧ 
+      let fn := t.get_app_fn,
+          args := t.get_app_args,
+          fn_type := fn.typeof σ in
+        fn.is_const = tt ∧ fn.in_fo_language L σ = tt ∧ fn_type.get_return_type.is_fo_sort L = tt ∧ 
+        (∀ t' ∈ args, is_fo_term L t σ) ∧
+        fn_type.get_arg_types = t.get_app_args.map (λ t', t'.typeof σ)) :=
 begin
-  intro t, 
-  induction t with _ _ t₁ t₂ ih₁ ih₂; intro h',
-  { cases h',
-    simp [in_fo_language, is_var, is_const, is_app, is_fo_term, type.is_sort],
-    simp [typeof, h'_h, var_num], have h' := h _ h'_h, exact h'},
-  { simp [is_var, is_const, is_app, is_fo_term, type.is_sort] },
-  { simp [is_var, is_const, is_app, is_fo_term], apply is_fo_term_iff _ _ _ h' },
-  { simp [in_fo_language, is_var, is_const, is_app, is_fo_term, type.is_sort, typeof] }
-end
+  induction t,
+  { simp [is_fo_term, in_fo_language, is_well_typed_iff, typeof],
+    cases (decidable.em (t < list.length σ)) with h h; simp [h] },
+  { simp [is_fo_term, in_fo_language, is_well_typed_iff] },
+  { simp, apply is_fo_term_iff_aux, reflexivity  },
+  simp [is_fo_term, type.is_fo_sort, type.is_sort, typeof]
+end 
 
 end term
 

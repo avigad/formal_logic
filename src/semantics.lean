@@ -7,12 +7,10 @@ The "standard" semantics for type theory: `type`s denote `Type`s, and `terms` de
 -/
 import .syntax data.bool
 
-/- For now, we're only dealing with "pure" types, i.e. types without type
-   variables and constructors -- only basic types and arrows.
+/- 
+For now, we're only dealing with "pure" types, i.e. types without type variables and constructors only basic types and arrows.
 
-   Also, the use of Type* is illusory. Because we interpret `nat`, `bool`, etc.
-   as the corresponding elements of Type 1, Type* is forced to be Type 1.
-   Maybe we can get around this with lifting.
+Also, the use of Type* is illusory. Because we interpret `nat`, `bool`, etc. as the corresponding elements of Type 1, Type* is forced to be Type 1. Maybe we can get around this with lifting.
 -/
 
 namespace hol
@@ -123,28 +121,30 @@ inductive evaluates_to (bval : ℕ → option Type*) (cval : ℕ → option (Σ 
   const → Π T : Type*, T → Prop
 | eval_user (n : ℕ) (h : option.is_some (cval n)) (t : hol.type) (l : list hol.type) : 
     evaluates_to ⟨kind.user n, t, l⟩ (option.get h).1 (option.get h).2
-| eval_true  : evaluates_to ⟨kind.true, mk_prop, []⟩ Prop _root_.true
-| eval_false : evaluates_to ⟨kind.false, mk_prop, []⟩ Prop _root_.false
-| eval_not   : evaluates_to ⟨kind.not, mk_prop ⇒ mk_prop, []⟩ (Prop → Prop) (λ P, ¬ P)
-| eval_and   : evaluates_to ⟨kind.and, mk_prop ⇒ mk_prop ⇒ mk_prop, []⟩ (Prop → Prop → Prop) _root_.and
-| eval_or    : evaluates_to ⟨kind.or, mk_prop ⇒ mk_prop ⇒ mk_prop, []⟩ (Prop → Prop → Prop) _root_.or
+| eval_true    : evaluates_to ⟨kind.true, mk_prop, []⟩ Prop _root_.true
+| eval_false   : evaluates_to ⟨kind.false, mk_prop, []⟩ Prop _root_.false
+| eval_not     : evaluates_to ⟨kind.not, mk_prop ⇒ mk_prop, []⟩ (Prop → Prop) (λ P, ¬ P)
+| eval_and     : evaluates_to ⟨kind.and, mk_prop ⇒ mk_prop ⇒ mk_prop, []⟩ (Prop → Prop → Prop) 
+                _root_.and
+| eval_or      : evaluates_to ⟨kind.or, mk_prop ⇒ mk_prop ⇒ mk_prop, []⟩ (Prop → Prop → Prop)
+                _root_.or
 | eval_implies : evaluates_to ⟨kind.implies, mk_prop ⇒ mk_prop ⇒ mk_prop, []⟩ 
                     (Prop → Prop → Prop) (λ P Q, P → Q)
-| eval_iff   : evaluates_to ⟨kind.iff, mk_prop ⇒ mk_prop ⇒ mk_prop, []⟩ 
+| eval_iff     : evaluates_to ⟨kind.iff, mk_prop ⇒ mk_prop ⇒ mk_prop, []⟩ 
                     (Prop → Prop → Prop) _root_.iff
-| eval_all (t : hol.type) (h : t.ok bval)  : 
+| eval_all (t : hol.type) (h : t.ok bval) : 
                   let T := type.eval bval t h in
                   evaluates_to ⟨kind.all, (t ⇒ mk_prop) ⇒ mk_prop, [t]⟩ ((T → Prop) → Prop)
                     (λ P, ∀ x : T, P x)
-| eval_ex  (t : hol.type) (h : t.ok bval)  : 
+| eval_ex  (t : hol.type) (h : t.ok bval) : 
                   let T := type.eval bval t h in
                   evaluates_to ⟨kind.all, (t ⇒ mk_prop) ⇒ mk_prop, [t]⟩ ((T → Prop) → Prop)
                     (λ P, ∃ x : T, P x)
-| eval_add   : evaluates_to ⟨kind.add, mk_nat ⇒ mk_nat ⇒ mk_nat, []⟩ (nat → nat → nat) nat.add
-| eval_mul   : evaluates_to ⟨kind.mul, mk_nat ⇒ mk_nat ⇒ mk_nat, []⟩ (nat → nat → nat) nat.mul
-| eval_sub   : evaluates_to ⟨kind.sub, mk_nat ⇒ mk_nat ⇒ mk_nat, []⟩ (nat → nat → nat) nat.sub
+| eval_add     : evaluates_to ⟨kind.add, mk_nat ⇒ mk_nat ⇒ mk_nat, []⟩ (nat → nat → nat) nat.add
+| eval_mul     : evaluates_to ⟨kind.mul, mk_nat ⇒ mk_nat ⇒ mk_nat, []⟩ (nat → nat → nat) nat.mul
+| eval_sub     : evaluates_to ⟨kind.sub, mk_nat ⇒ mk_nat ⇒ mk_nat, []⟩ (nat → nat → nat) nat.sub
 | eval_bval (b : bool) : evaluates_to ⟨kind.bval b, mk_bool, []⟩ bool b
-| eval_nval (n : nat) : evaluates_to ⟨kind.nval n, mk_nat, []⟩ nat n
+| eval_nval (n : nat)  : evaluates_to ⟨kind.nval n, mk_nat, []⟩ nat n
 
 inductive ok (bval : ℕ → option Type*) (cval : ℕ → option (Σ T : Type*, T)) : 
   const → Prop
@@ -293,22 +293,22 @@ data to interpret it.
 inductive ok (bval : ℕ → option Type*) (cval : ℕ → option (Σ T : Type*, T)) : 
   Π (t : term) (σ : list type) (l : list (Σ T : Type*, T)), Prop
 | var_ok (n : nat) (σ : list type) (l : list (Σ T : Type*, T))
-    (h₀ : n < σ.length) (h₁ : n < l.length) (h₂ : (σ.nth_le n h₀).ok bval)
-    (h₃ : (σ.nth_le n h₀).eval bval h₂ = (l.nth_le n h₁).fst) :
-  ok (Var n) σ l
+      (h₀ : n < σ.length) (h₁ : n < l.length) (h₂ : (σ.nth_le n h₀).ok bval)
+      (h₃ : (σ.nth_le n h₀).eval bval h₂ = (l.nth_le n h₁).fst) :
+    ok (Var n) σ l
 | const_ok (c : const) (σ : list type) (l : list (Σ T : Type*, T)) (h : c.ok bval cval) :
-  ok (Const c) σ l
+    ok (Const c) σ l
 | app_ok (t₁ t₂ : term) (σ : list type) (l : list (Σ T : Type*, T))
-    (h₁ : ok t₁ σ l) (h₂ : ok t₂ σ l) 
-    (h₃ : (typeof t₁ σ).is_arrow) 
-    (h₄ : (typeof t₁ σ).domain = typeof t₂ σ):
-  ok (App t₁ t₂) σ l
+      (h₁ : ok t₁ σ l) (h₂ : ok t₂ σ l) 
+      (h₃ : (typeof t₁ σ).is_arrow) 
+      (h₄ : (typeof t₁ σ).domain = typeof t₂ σ):
+    ok (App t₁ t₂) σ l
 | abs_ok (s : string) (ty : type) (t : term) (σ : list type) (l : list (Σ T : Type*, T)) 
-    (h₀ : ty.ok bval)
-    (h₁ : (typeof t (ty :: σ)).ok bval)
-    (h₂ : let T := ty.eval bval h₀ in
-          ∀ a : T, ok t (ty :: σ) (⟨T, a⟩ :: l)) :
-  ok (Abs s ty t) σ l
+      (h₀ : ty.ok bval)
+      (h₁ : (typeof t (ty :: σ)).ok bval)
+    ( h₂ : let T := ty.eval bval h₀ in
+            ∀ a : T, ok t (ty :: σ) (⟨T, a⟩ :: l)) :
+    ok (Abs s ty t) σ l
 
 def type_ok (bval : ℕ → option Type*) (cval : ℕ → option (Σ T : Type*, T)) : 
   Π (t : term) (σ : list type) (l : list (Σ T : Type*, T)) (h : t.ok bval cval σ l),
