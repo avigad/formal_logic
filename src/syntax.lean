@@ -417,61 +417,6 @@ def repr : term → string
 | (App t₁ t₂)  := "(App " ++ t₁.repr ++ t₂.repr ++ ")"
 | (Abs s ty t) := "(Abs " ++ _root_.repr s ++ " " ++ ty.repr ++ " " ++ t.repr ++ ")"
 
-/-- Infers the type of a term, given an assignment to free variables. Assumes the expression is
-    well-typed-/
-def typeof : term → list type → type
-| (Var n) σ       := if h : n < σ.length then σ.nth_le n h else mk_nat
-| (Const c) σ     := c.type
-| (App t₁ t₂) σ   := (typeof t₁ σ).codomain
-| (Abs s ty t) σ  := ty ⇒ typeof t (ty :: σ)
-
-inductive is_well_typed : term → list type → Prop
-| wt_var (n : ℕ) (σ : list type) (h : n < σ.length)      : is_well_typed (Var n) σ
-| wt_const (c : const) (σ : list type)                   : is_well_typed (Const c) σ
-| wt_app (t₁ t₂ : term) (σ : list type) 
-    (h₁ : is_well_typed t₁ σ) 
-    (h₂ : is_well_typed t₂ σ) 
-    (h₃ : (typeof t₁ σ).is_arrow = tt) 
-    (h₄ : (typeof t₁ σ).domain = typeof t₂ σ)            : is_well_typed (App t₁ t₂) σ
-| wt_abs (s : string) (ty : type) (t : term) 
-      (σ : list type)
-    (h₁ : is_well_typed t (ty :: σ))                     : is_well_typed (Abs s ty t) σ
-
-/-- Infers the type of a term, given an assignment to free variables. Returns none of expression is
-    not well-typed. -/
-def typeof_p : term → list type → option type 
-| (Var n)     σ  := σ.nth n
-| (Const c)   σ  := some c.type 
-| (App t₁ t₂) σ  := 
-    match typeof_p t₁ σ, typeof_p t₂ σ with 
-    | (some (type.Arr u v)), (some w) := if u = w then some v else none
-    | _                    , _        := none
-    end
-| (Abs s ty t) σ := match typeof_p t (ty :: σ) with
-                    | some ty₂ := some (type.Arr ty ty₂)
-                    | _        := none
-                    end
-
--- a boolean version
-@[simp]
-def is_well_typed_b : term → list type → bool
-| (Var n)     σ := if n < σ.length then tt else ff
-| (Const c)   σ := tt
-| (App t₁ t₂) σ := is_well_typed_b t₁ σ && is_well_typed_b t₂ σ && 
-                     (typeof t₁ σ).is_arrow && ((typeof t₁ σ).domain = typeof t₂ σ)
-| (Abs s ty t) σ := is_well_typed_b t (ty :: σ)
-
-theorem is_well_typed_iff (t : term) : 
-  ∀ σ, is_well_typed t σ ↔ (is_well_typed_b t σ = tt) :=
-begin
-  induction t with _ _ _ _ h₁ h₂ _ ty _ h,
-  {intro σ, split, {intro h, cases h; simp [*]}, intro h, simp at h, constructor, assumption},
-  {intro σ, split, {intro h, cases h; simp [*]}, intro h, simp at h, constructor},
-  {intro σ, simp [(h₁ σ).symm, (h₂ σ).symm], split, {intro h, cases h; simp [*]}, intro h, constructor; simp [*]},
-  {intro σ, simp [(h (ty::σ)).symm], split, {intro h, cases h, assumption}, 
-    intro h, constructor; simp [*]}
-end
-
 @[simp]
 def is_var : term → bool
 | (Var n) := tt
@@ -528,6 +473,68 @@ by induction t; simp [get_app_fn, get_app_args_aux, mk_app, *]
 theorem mk_app_get_app (t : term) : mk_app (get_app_fn t) (get_app_args t) = t :=
 by simp [get_app_args, mk_app_get_app_aux, mk_app]
 
+theorem not_is_app_get_app_fn (t : term) : is_app t.get_app_fn = ff :=
+by { induction t with _ _ _ _ ih; simp, exact ih }
+
+/-- Infers the type of a term, given an assignment to free variables. Assumes the expression is
+    well-typed-/
+def typeof : term → list type → type
+| (Var n) σ       := if h : n < σ.length then σ.nth_le n h else mk_nat
+| (Const c) σ     := c.type
+| (App t₁ t₂) σ   := (typeof t₁ σ).codomain
+| (Abs s ty t) σ  := ty ⇒ typeof t (ty :: σ)
+
+inductive is_well_typed : term → list type → Prop
+| wt_var (n : ℕ) (σ : list type) (h : n < σ.length)      : is_well_typed (Var n) σ
+| wt_const (c : const) (σ : list type)                   : is_well_typed (Const c) σ
+| wt_app (t₁ t₂ : term) (σ : list type) 
+    (h₁ : is_well_typed t₁ σ) 
+    (h₂ : is_well_typed t₂ σ) 
+    (h₃ : (typeof t₁ σ).is_arrow = tt) 
+    (h₄ : (typeof t₁ σ).domain = typeof t₂ σ)            : is_well_typed (App t₁ t₂) σ
+| wt_abs (s : string) (ty : type) (t : term) 
+      (σ : list type)
+    (h₁ : is_well_typed t (ty :: σ))                     : is_well_typed (Abs s ty t) σ
+
+/-- Infers the type of a term, given an assignment to free variables. Returns none of expression is
+    not well-typed. -/
+def typeof_p : term → list type → option type 
+| (Var n)     σ  := σ.nth n
+| (Const c)   σ  := some c.type 
+| (App t₁ t₂) σ  := 
+    match typeof_p t₁ σ, typeof_p t₂ σ with 
+    | (some (type.Arr u v)), (some w) := if u = w then some v else none
+    | _                    , _        := none
+    end
+| (Abs s ty t) σ := match typeof_p t (ty :: σ) with
+                    | some ty₂ := some (type.Arr ty ty₂)
+                    | _        := none
+                    end
+
+-- a boolean version
+@[simp]
+def is_well_typed_b : term → list type → bool
+| (Var n)     σ := if n < σ.length then tt else ff
+| (Const c)   σ := tt
+| (App t₁ t₂) σ := is_well_typed_b t₁ σ && is_well_typed_b t₂ σ && 
+                     (typeof t₁ σ).is_arrow && ((typeof t₁ σ).domain = typeof t₂ σ)
+| (Abs s ty t) σ := is_well_typed_b t (ty :: σ)
+
+theorem is_well_typed_iff (t : term) : 
+  ∀ σ, is_well_typed t σ ↔ (is_well_typed_b t σ = tt) :=
+begin
+  induction t with _ _ _ _ h₁ h₂ _ ty _ h,
+  {intro σ, split, {intro h, cases h; simp [*]}, intro h, simp at h, constructor, assumption},
+  {intro σ, split, {intro h, cases h; simp [*]}, intro h, simp at h, constructor},
+  {intro σ, simp [(h₁ σ).symm, (h₂ σ).symm], split, {intro h, cases h; simp [*]}, intro h, constructor; simp [*]},
+  {intro σ, simp [(h (ty::σ)).symm], split, {intro h, cases h, assumption}, 
+    intro h, constructor; simp [*]}
+end
+
+@[simp] lemma is_well_typed_of_is_const {t : term} {σ : list type} : 
+  is_const t = tt → is_well_typed t σ :=
+by { cases t; simp, constructor }
+
 theorem is_well_typed_mk_app (l : list term) (σ : list type) :
   ∀ t, is_well_typed (mk_app t l) σ ↔ 
          is_well_typed t σ ∧ (∀ t' ∈ l, is_well_typed t' σ) ∧ 
@@ -566,6 +573,24 @@ begin
   simp [type.get_arg_types_codomain]
 end
 
+theorem is_arrow_get_app_fn_of_is_arrow (t : term)(σ : list type) (h : t.is_well_typed σ) 
+  (h' : (t.typeof σ).is_arrow = tt) : (t.get_app_fn.typeof σ).is_arrow = tt :=
+begin
+  revert h h', 
+  induction t with _ _ _ _ ih; simp,
+  rintro ⟨h₀, h₁, h₂, h₃⟩, intro h'',
+  apply ih; assumption
+end
+
+theorem is_arrow_get_app_fn_of_is_app {t : term} {σ : list type} (h : t.is_well_typed σ) 
+  (h' : is_app t = tt) : ((t.get_app_fn).typeof σ).is_arrow = tt :=
+begin
+  revert h h',
+  cases t; simp,
+  intro h, cases h,
+  apply is_arrow_get_app_fn_of_is_arrow; assumption
+end
+
 theorem typeof_mk_app_is_arrow (t: term) (as : list term) (σ : list type) :
   (typeof (mk_app t as) σ).is_arrow = (as.length < (t.typeof σ).num_arg_types) := 
 begin
@@ -601,7 +626,7 @@ begin
   have : t.get_app_args.length = (t.get_app_fn.typeof σ).num_arg_types,
     from length_get_app_args_of_not_is_arrow h h',
   rw ← mk_app_get_app t at h h',
-  have : t.get_app_args.map (λ t', typeof t' σ) <+: (t.get_app_fn.typeof σ).get_arg_types, 
+  have : t.get_app_args.map (λ t', typeof t' σ) <+: (t.get_app_fn.typeof σ).get_arg_types,
     from ((is_well_typed_mk_app t.get_app_args σ t.get_app_fn).mp h').right.right,
   have : t.get_app_args.map (λ t', typeof t' σ) = (t.get_app_fn.typeof σ).get_arg_types,
     by { apply list.eq_of_prefix_of_length_eq this, rw type.length_get_arg_types, simp, assumption},
@@ -657,8 +682,8 @@ begin
 end
 
 -- an inductive characterization of well typed terms whose types are not arrows 
-theorem type_is_not_arrow_iff (σ : list type) : 
-  ∀ t : term, t.is_well_typed σ → 
+theorem type_is_not_arrow_iff {σ : list type} : 
+  ∀ {t : term}, t.is_well_typed σ → 
     ((t.typeof σ).is_arrow = ff ↔
       (t.is_var = tt ∧ (t.typeof σ).is_arrow = ff) ∨ 
       (t.is_const = tt ∧ (t.typeof σ).is_arrow = ff) ∨ 
