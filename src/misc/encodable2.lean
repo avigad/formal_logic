@@ -1,4 +1,4 @@
-import data.encodable data.fin
+import data.equiv.encodable data.equiv.list data.fin data.finset data.fintype
 
 /-
 `Wfin α ar` is the type of finitely branching trees with labels from α, where 
